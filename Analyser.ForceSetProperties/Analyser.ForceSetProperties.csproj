@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<TargetFramework>netstandard2.0</TargetFramework>
+	<LangVersion>latest</LangVersion>
+	<OutputItemType>Analyzer</OutputItemType>
+	<EnableDefaultItems>false</EnableDefaultItems>
+	<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	<OutputItemType>Analyzer</OutputItemType>
+	<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	<CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\Generated</CompilerGeneratedFilesOutputPath>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+</Project>

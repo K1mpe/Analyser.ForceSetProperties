@@ -1,0 +1,8 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/Analyser.ForceSetProperties/bin/Debug/net8.0
+/Analyser.ForceSetProperties/obj
+/Example/obj
+/.vs
