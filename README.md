@@ -1,6 +1,6 @@
 ﻿# ForceSetProperties
 
-Compile-time enforcement that **all publicly settable properties must be initialized** when constructing a type.
+Compile-time enforcement that **all settable properties must be initialized** when constructing a type.
 
 `ForceSetProperties` is a Roslyn analyzer–backed attribute that prevents missing property assignments when creating DTOs, mapping models, or writing factory methods. If a new property is added later, **all annotated constructors, methods, and expressions will fail compilation until updated**.
 
@@ -9,7 +9,7 @@ Compile-time enforcement that **all publicly settable properties must be initial
 ## ✨ Features
 
 * ✅ Compile-time enforcement (no runtime cost)
-* ✅ Works on **classes**, **constructors**, **methods**, and **expressions**
+* ✅ Works on **constructors**, **methods**, and **expressions** (class-level support is planned — see [Limitations](#limitations))
 * ✅ Supports **generic type override**: `ForceSetProperties<T>`
 * ✅ Detects **object initializer** assignments
 * ✅ Detects **return expressions**
@@ -37,12 +37,12 @@ Install-Package ForceSetProperties.Analyzers
 
 ## 🚀 Basic Usage
 
-### Apply to a class
+### Apply to a class — not yet supported
 
-Placing the attribute on a class forces **every constructor, method, and expression** that creates the type to set **all public settable properties**.
+Placing `[ForceSetProperties]` directly on a class is **not implemented yet**. Rather than silently doing nothing, this raises a compile error so it can't be mistaken for working:
 
 ```csharp
-[ForceSetProperties]
+[ForceSetProperties] // ❌ FSP006: not yet supported on a class
 public class DtoModel
 {
     public string Name { get; set; }
@@ -51,15 +51,7 @@ public class DtoModel
 }
 ```
 
-Now any creation missing a property will produce a **compile error**:
-
-```csharp
-return new DtoModel
-{
-    Name = name
-    // ❌ Compile error: Missing CreatedAt, UpdatedAt
-};
-```
+Until class-level support lands, annotate the individual constructors, methods, or expressions that build the type instead — see the sections below.
 
 ---
 
@@ -161,6 +153,29 @@ This is especially useful for:
 
 ---
 
+## Which properties are required
+
+A property is required when the code being validated can actually see **and** set it — not only when the property is `public`. The analyzer checks this the same way the C# compiler does, using normal accessibility rules (`public`, `internal`, `protected`, `private`) from the point of view of the annotated constructor, method, or expression.
+
+```csharp
+public class DtoModel
+{
+    public string Name { get; private set; }
+
+    [ForceSetProperties]
+    public static DtoModel CreateInstance(string name)
+    {
+        return new DtoModel { Name = name };
+    }
+}
+```
+
+`Name` has a `private set`, but `CreateInstance` lives inside `DtoModel`, so it has access — `Name` is still required. The same `private set` property would **not** be required from a `[ForceSetProperties]` method in a different class, since that code has no access to the setter.
+
+This means a property is skipped only when the code being validated genuinely cannot set it — not just because the setter happens to be non-public.
+
+---
+
 ## What counts as "set"
 
 The analyzer considers a property initialized when:
@@ -196,6 +211,57 @@ UpdatedAt = db.UpdatedAt;
 
 ---
 
+## Tracing into called methods and constructors
+
+If a `[ForceSetProperties]` method doesn't build the target type directly but delegates to another **normal, non-virtual method or constructor**, the analyzer follows that call and checks the callee for the same "what counts as set" patterns.
+
+```csharp
+[ForceSetProperties]
+public DtoModel Create(DbModel db)
+{
+    return Map(db);
+}
+
+private static DtoModel Map(DbModel db)
+{
+    return new DtoModel
+    {
+        Name = db.Name,
+        CreatedAt = db.CreatedAt,
+        UpdatedAt = db.UpdatedAt
+    };
+}
+```
+
+This is valid — `Map` sets every property, so `Create` is considered compliant even though it never constructs `DtoModel` itself.
+
+This works because the callee is part of the same compilation, so the analyzer can resolve exactly which method or constructor runs and inspect its body at compile time.
+
+This also follows constructor chaining (`: this(...)` / `: base(...)`):
+
+```csharp
+public class DtoModel
+{
+    public string Name { get; set; }
+    public string Id { get; set; }
+
+    public DtoModel()
+    {
+        Id = Guid.NewGuid().ToString();
+    }
+
+    [ForceSetProperties]
+    public DtoModel(string name) : this()
+    {
+        Name = name;
+    }
+}
+```
+
+`Id` is never assigned directly inside the `(string name)` constructor, but the analyzer follows the `: this()` call into the parameterless constructor and finds it there.
+
+---
+
 ## What triggers a compile error
 
 ### Missing property
@@ -212,18 +278,54 @@ error FSP002: The following properties must be initialized:
  - UpdatedAt
 ```
 
+### Unsupported attribute placement
+
+```
+error FSP006: ForceSetProperties can only be applied to constructors, methods, or properties; this target is not yet supported
+```
+
+Raised whenever `[ForceSetProperties]` is placed anywhere else — most notably on a class (see above), but also fields, events, or any other declaration. This exists so an unsupported usage fails loudly instead of being silently skipped.
+
+### Unsupported destination type
+
+```
+error FSP007: ForceSetProperties cannot validate 'void'; void, object, and dynamic are not supported destination types
+```
+
+Raised when the resolved destination type is `void`, `object`, or `dynamic` — there are no strongly-typed properties to check, so validating it would either be meaningless or trivially "pass" with nothing checked. This applies no matter how the type was determined: return type inference, `ForceSetProperties<T>`, or an explicit `Types = [...]`.
+
+---
+
+## Validation feedback
+
+Besides compile errors, the analyzer also reports an informational diagnostic when a `[ForceSetProperties]` target passes validation.
+
+When every property was set directly, it's a short one-line summary naming the type and its properties:
+
+```
+info FSP101: ForceSetProperties validated DtoModel: Name, CreatedAt, UpdatedAt
+```
+
+When at least one property was only found by [tracing into a called method or constructor](#tracing-into-called-methods-and-constructors), it switches to a full breakdown showing where each property was actually set — file path relative to the project, plus the method name whenever that came from a trace:
+
+```
+info FSP101: Type checked: DtoModel
+Name: TestModels\DtoModel.cs line 46
+CreatedAt: TestModels\DtoModel.cs line 47
+UpdatedAt: TestModels\DtoModel.cs line 23 (via .ctor)
+```
+
+If a property ends up being set in more than one place, only the first location found is shown.
+
+This is reported at `Info` severity on the `[ForceSetProperties]` attribute, so it stays out of the way in normal build output while still being visible as a subtle IDE squiggle and in the tooltip / "Messages" tab of the Error List — a quick way to confirm a mapping is complete without opening and re-reading the whole method.
+
 ---
 
 ## Attribute Targets
 
-### Class
+### Class — not yet supported
 
-Forces all constructors, methods, and expressions in the class
-
-```csharp
-[ForceSetProperties]
-public class DtoModel { }
-```
+Raises `FSP006`. See [Apply to a class](#apply-to-a-class--not-yet-supported) above.
 
 ---
 
@@ -387,13 +489,26 @@ All forms are treated equivalently by the analyzer.
 
 The analyzer intentionally does NOT:
 
-* Require private setters
+* Require setters to be public
 * Require constructor parameters
 * Enforce nullability
 * Enforce order
 * Enforce nested object initialization
 
-This analyzer **only ensures all public settable properties or init properties are assigned**.
+This analyzer **only ensures all properties settable from the validated code — public, internal, protected, or private — are assigned**.
+
+---
+
+## Limitations
+
+Tracing into called methods and constructors has a few intentional boundaries:
+
+* **Interfaces, virtual, and overridden methods are not followed.** If the call could resolve to more than one implementation at runtime, the analyzer ignores it entirely — assignments inside are neither counted nor required.
+* **Delegates and lambdas stored in variables are not followed.** Only direct calls to ordinary methods and constructors are traced.
+* **Conditional branches (`if`/`else`, `switch`) are not analyzed for exhaustiveness.** A property set inside an `if` — but not its `else`, or in only one `switch` case — still counts as "set". The analyzer does not try to prove every code path sets a property; the goal is to catch a property that was **completely forgotten**, not to enforce branch-complete initialization.
+* **Methods without available source (e.g. from a referenced assembly) are not followed.** Only methods and constructors that are part of the current compilation can be inspected.
+
+These limitations are deliberate — the feature exists to catch forgotten property assignments when a new property is added, not to perform full control-flow or dataflow analysis.
 
 ---
 
@@ -426,9 +541,14 @@ This makes it ideal for:
 Initial DTO:
 
 ```csharp
-[ForceSetProperties]
 public class DtoModel
 {
+    [ForceSetProperties]
+    public DtoModel(string name)
+    {
+        Name = name;
+    }
+
     public string Name { get; set; }
 }
 ```
@@ -452,13 +572,25 @@ This prevents:
 
 ## Analyzer Rules
 
+Error diagnostics use the `FSP0xx` range; informational diagnostics use `FSP1xx`, so severity is visible from the ID alone.
+
+### Errors (`FSP0xx`)
+
 | ID     | Description                      |
-| ------ | -------------------------------- |
-| FSP001 | Missing property assignment      |
-| FSP002 | Multiple properties missing      |
-| FSP003 | No object creation found         |
-| FSP004 | Multiple assignments detected    |
-| FSP005 | Unsupported construction pattern |
+| ------ | --------------------------------- |
+| FSP001 | Missing property assignment       |
+| FSP002 | Multiple properties missing       |
+| FSP003 | No object creation found          |
+| FSP004 | Multiple assignments detected     |
+| FSP005 | Unsupported construction pattern  |
+| FSP006 | Unsupported attribute target       |
+| FSP007 | Unsupported destination type       |
+
+### Informational (`FSP1xx`)
+
+| ID     | Description               |
+| ------ | -------------------------- |
+| FSP101 | All properties validated   |
 
 ---
 
@@ -466,10 +598,7 @@ This prevents:
 
 ### Use on DTOs
 
-```csharp
-[ForceSetProperties]
-public class UserDto
-```
+Class-level support isn't available yet, so annotate every constructor and factory method that builds the DTO instead (see below).
 
 ### Use on mapping constructors
 

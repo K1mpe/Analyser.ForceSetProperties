@@ -6,3 +6,6 @@
 /Analyser.ForceSetProperties/obj
 /Example/obj
 /.vs
+/Analyser.ForceSetProperties/bin
+/Analyser.ForceSetProperties.Tests/bin/Debug/net8.0
+/Analyser.ForceSetProperties.Tests/obj

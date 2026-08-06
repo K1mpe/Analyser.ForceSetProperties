@@ -1,0 +1,56 @@
+name: Publish NuGet package
+
+on:
+  release:
+    types: [published]
+
+env:
+  PROJECT_PATH: Analyser.ForceSetProperties/Analyser.ForceSetProperties.csproj
+  PACKAGE_OUTPUT_DIR: ${{ github.workspace }}/nupkg
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve package version from release tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#[vV]}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+      - name: Pack
+        run: >
+          dotnet pack ${{ env.PROJECT_PATH }}
+          --configuration Release
+          --no-build
+          -p:PackageVersion=${{ steps.version.outputs.version }}
+          --output ${{ env.PACKAGE_OUTPUT_DIR }}
+
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: DekimpeJonas
+
+      - name: Push to NuGet.org
+        run: >
+          dotnet nuget push "${{ env.PACKAGE_OUTPUT_DIR }}/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

@@ -7,12 +7,10 @@ using System.Threading.Tasks;
 
 namespace Analyser.ForceSetProperties.TestModels
 {
-    [ForceSetProperties] //Placing it on a class, forces every constructor, method and expression to have all properties set.
-    public class DtoModel
+    public class DtoModel : ICloneable
     {
         public DtoModel()
         {
-            
         }
 
         [ForceSetProperties] //Placing the attribute on a class, forces this constructor to have all properties set.
@@ -23,9 +21,18 @@ namespace Analyser.ForceSetProperties.TestModels
             UpdatedAt = db.UpdatedAt;
         }
 
+        public DtoModel(DtoModel source)
+        {
+            Name = source.Name;
+            CreatedAt = source.CreatedAt;
+            UpdatedAt = source.UpdatedAt;
+        }
+
         public string Name { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+
 
         [ForceSetProperties] //Placing the attribute on a method, forces this method to have all properties set.
         public DtoModel FromFunction(string name, DateTime createdAt, DateTime updatedAt)
@@ -34,11 +41,11 @@ namespace Analyser.ForceSetProperties.TestModels
             {
                 Name = name,
                 CreatedAt = createdAt,
-                UpdatedAt = updatedAt
+                UpdatedAt = updatedAt,
             };
         }
 
-         [ForceSetProperties<DtoModel>] //Placing the attrute while providing the type, this is in case we do not check the return type
+        [ForceSetProperties<DtoModel>] //Placing the attrute while providing the type, this is in case we do not check the return type
         public DbModel SomeFunction(DbModel source, out DtoModel dto)
         {
             dto = new DtoModel
@@ -50,6 +57,17 @@ namespace Analyser.ForceSetProperties.TestModels
             return source;
         }
 
+        [ForceSetProperties<DtoModel>]
+        public object Clone()
+        {
+            return new DtoModel
+            {
+                Name = this.Name,
+                CreatedAt = this.CreatedAt,
+                UpdatedAt = this.UpdatedAt
+            };
+        }
+
         [ForceSetProperties] // can also be placed on expressions or lambda functions
         public static Expression<Func<DbModel, DtoModel>> FromExpression => db => new DtoModel
         {
@@ -58,7 +76,6 @@ namespace Analyser.ForceSetProperties.TestModels
             UpdatedAt = db.UpdatedAt
         };
 
-
-
     }
 }
+
