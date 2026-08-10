@@ -39,7 +39,7 @@ public class Factory
 
             var result = _sut.FindTraceableCallees(node, semanticModel);
 
-            Assert.Contains(map, result, SymbolEqualityComparer.Default);
+            Assert.Contains(result, r => SymbolEqualityComparer.Default.Equals(r.Callee, map));
         }
 
         [Fact]
@@ -68,7 +68,36 @@ public class Factory
 
             var result = _sut.FindTraceableCallees(node, semanticModel);
 
-            Assert.Contains(constructor, result, SymbolEqualityComparer.Default);
+            Assert.Contains(result, r => SymbolEqualityComparer.Default.Equals(r.Callee, constructor));
+        }
+
+        [Fact]
+        public void TargetTypedNewConstructorCall_IsReturned()
+        {
+            const string source = @"
+public class DtoModel
+{
+    public DtoModel(string name)
+    {
+    }
+}
+
+public class Factory
+{
+    public DtoModel Create()
+    {
+        return new(""x"");
+    }
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+            var create = RoslynTestHelper.GetMethod(compilation, "Factory", "Create");
+            var constructor = RoslynTestHelper.GetConstructor(compilation, "DtoModel");
+            var node = RoslynTestHelper.GetSyntaxNode(create);
+            var semanticModel = compilation.GetSemanticModel(node.SyntaxTree);
+
+            var result = _sut.FindTraceableCallees(node, semanticModel);
+
+            Assert.Contains(result, r => SymbolEqualityComparer.Default.Equals(r.Callee, constructor));
         }
 
         [Fact]
@@ -97,7 +126,7 @@ public class DtoModel
 
             var result = _sut.FindTraceableCallees(node, semanticModel);
 
-            Assert.Contains(parameterless, result, SymbolEqualityComparer.Default);
+            Assert.Contains(result, r => SymbolEqualityComparer.Default.Equals(r.Callee, parameterless));
         }
 
         [Fact]
@@ -128,7 +157,7 @@ public class Derived : Base
 
             var result = _sut.FindTraceableCallees(node, semanticModel);
 
-            Assert.Contains(baseConstructor, result, SymbolEqualityComparer.Default);
+            Assert.Contains(result, r => SymbolEqualityComparer.Default.Equals(r.Callee, baseConstructor));
         }
 
         [Fact]

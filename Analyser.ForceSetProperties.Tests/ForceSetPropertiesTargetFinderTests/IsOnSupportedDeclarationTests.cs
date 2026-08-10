@@ -43,5 +43,26 @@ public class DtoModel
 
             Assert.False(_sut.IsOnSupportedDeclaration(attribute));
         }
+
+        [Fact]
+        public void AttributeOnAnInterfaceMethodSignatureWithNoBody_ReturnsFalse()
+        {
+            const string source = @"
+public class Dto
+{
+    public string Name { get; set; }
+}
+
+public interface IFactory
+{
+    [ForceSetProperties]
+    Dto Create();
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+            var tree = compilation.GetUserSyntaxTree();
+            var attribute = tree.GetRoot().DescendantNodes().OfType<AttributeSyntax>().Single();
+
+            Assert.False(_sut.IsOnSupportedDeclaration(attribute));
+        }
     }
 }

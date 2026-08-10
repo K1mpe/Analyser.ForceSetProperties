@@ -11,9 +11,9 @@ namespace Analyser.ForceSetProperties.Tests.MessageBuilderTests
         [Fact]
         public void ListsEveryMissingPropertyOnItsOwnBulletLine()
         {
-            var result = _sut.BuildMissingPropertiesMessage(new List<string> { "CreatedAt", "UpdatedAt" });
+            var result = _sut.BuildMissingPropertiesMessage(new List<string> { "CreatedAt", "UpdatedAt" }, "DtoModel");
 
-            Assert.Equal("The following properties must be initialized:\n - CreatedAt\n - UpdatedAt", result);
+            Assert.Equal("The following properties on 'DtoModel' must be initialized:\n - CreatedAt\n - UpdatedAt", result);
         }
     }
 }

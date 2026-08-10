@@ -22,7 +22,7 @@ public class DtoModel
 
             var diagnostic = _sut.BuildUnsupportedTargetDiagnostic(location);
 
-            Assert.Equal("FSP006", diagnostic.Id);
+            Assert.Equal("FSP003", diagnostic.Id);
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         }
 

@@ -34,7 +34,7 @@ public class Factory
 
             var diagnostic = _sut.BuildValidatedDiagnostic(context, @"C:\Project");
 
-            Assert.Equal("FSP101", diagnostic.Id);
+            Assert.Equal("FSP201", diagnostic.Id);
             Assert.Equal(DiagnosticSeverity.Info, diagnostic.Severity);
             Assert.Equal("ForceSetProperties validated DtoModel: Name", diagnostic.GetMessage());
         }

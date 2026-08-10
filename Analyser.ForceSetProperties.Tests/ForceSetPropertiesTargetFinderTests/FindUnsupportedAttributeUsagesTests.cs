@@ -95,6 +95,51 @@ public class Factory
         }
 
         [Fact]
+        public void MethodTargetedAttributeOnARecordPrimaryConstructor_IsNotReported()
+        {
+            const string source = @"
+[method: ForceSetProperties]
+public record Person(string Name, int Age)
+{
+    public Person() : this(default, default) { }
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+
+            var result = _sut.FindUnsupportedAttributeUsages(compilation);
+
+            Assert.Empty(result);
+        }
+
+        [Fact]
+        public void AttributeOnARecordWithNoMethodTarget_IsReportedAsUnsupported()
+        {
+            const string source = @"
+[ForceSetProperties]
+public record Person(string Name, int Age);";
+            var compilation = RoslynTestHelper.Compile(source);
+
+            var result = _sut.FindUnsupportedAttributeUsages(compilation).ToList();
+
+            Assert.Single(result);
+        }
+
+        [Fact]
+        public void MethodTargetedAttributeOnARecordWithNoPrimaryConstructor_IsReportedAsUnsupported()
+        {
+            const string source = @"
+[method: ForceSetProperties]
+public record Person
+{
+    public string Name { get; set; }
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+
+            var result = _sut.FindUnsupportedAttributeUsages(compilation).ToList();
+
+            Assert.Single(result);
+        }
+
+        [Fact]
         public void UnrelatedAttribute_IsIgnored()
         {
             const string source = @"

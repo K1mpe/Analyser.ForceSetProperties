@@ -37,5 +37,25 @@ namespace Analyser.ForceSetProperties.Tests.MessageBuilderTests
 
             Assert.Equal(@"TestModels\DtoModel.cs line 10", result);
         }
+
+        [Fact]
+        public void MissingFilePath_OmitsThePathButKeepsTheLineNumber()
+        {
+            var location = new SetLocation("", 45);
+
+            var result = _sut.BuildLocationText(location, @"C:\Project");
+
+            Assert.Equal("line 45", result);
+        }
+
+        [Fact]
+        public void MissingFilePath_StillIncludesTheMethodNameWhenTraced()
+        {
+            var location = new SetLocation("", 45, "Map");
+
+            var result = _sut.BuildLocationText(location, @"C:\Project");
+
+            Assert.Equal("line 45 (via Map)", result);
+        }
     }
 }

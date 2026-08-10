@@ -25,7 +25,7 @@ public class Factory
 
             var diagnostic = _sut.BuildUnsupportedDestinationTypeDiagnostic(create.ReturnType, location);
 
-            Assert.Equal("FSP007", diagnostic.Id);
+            Assert.Equal("FSP004", diagnostic.Id);
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
             Assert.Contains("void", diagnostic.GetMessage());
         }

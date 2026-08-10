@@ -12,9 +12,19 @@ namespace Analyser.ForceSetProperties.Services
     {
         public Diagnostic BuildDiagnostic(ContextModel context, string basePath)
         {
+            if (context.RequiredProperties.Count == 0)
+            {
+                return BuildNoPropertiesFoundDiagnostic(context);
+            }
+
             return context.IsFullySet
                 ? BuildValidatedDiagnostic(context, basePath)
                 : BuildMissingPropertiesDiagnostic(context);
+        }
+
+        public Diagnostic BuildNoPropertiesFoundDiagnostic(ContextModel context)
+        {
+            return Diagnostic.Create(DiagnosticDescriptors.NoPropertiesFound, context.AttributeLocation, context.DestinationType.Name);
         }
 
         public Diagnostic BuildValidatedDiagnostic(ContextModel context, string basePath)
@@ -29,10 +39,10 @@ namespace Analyser.ForceSetProperties.Services
 
             if (missingNames.Count == 1)
             {
-                return Diagnostic.Create(DiagnosticDescriptors.MissingProperty, context.AttributeLocation, missingNames[0]);
+                return Diagnostic.Create(DiagnosticDescriptors.MissingProperty, context.AttributeLocation, missingNames[0], context.DestinationType.Name);
             }
 
-            var message = BuildMissingPropertiesMessage(missingNames);
+            var message = BuildMissingPropertiesMessage(missingNames, context.DestinationType.Name);
             return Diagnostic.Create(DiagnosticDescriptors.MissingProperties, context.AttributeLocation, message);
         }
 
@@ -46,15 +56,30 @@ namespace Analyser.ForceSetProperties.Services
             return Diagnostic.Create(DiagnosticDescriptors.UnsupportedDestinationType, location, type.ToDisplayString());
         }
 
+        public Diagnostic BuildAmbiguousGenericInferenceDiagnostic(ITypeSymbol type, Location location)
+        {
+            return Diagnostic.Create(DiagnosticDescriptors.AmbiguousGenericInference, location, type.ToDisplayString());
+        }
+
+        public Diagnostic BuildInterfaceDestinationTypeWarningDiagnostic(ITypeSymbol type, Location location)
+        {
+            return Diagnostic.Create(DiagnosticDescriptors.InterfaceDestinationType, location, type.ToDisplayString());
+        }
+
+        public Diagnostic BuildConflictingDestinationTypeDiagnostic(Location location)
+        {
+            return Diagnostic.Create(DiagnosticDescriptors.ConflictingDestinationTypeSpecification, location);
+        }
+
         public List<string> GetMissingPropertyNames(ContextModel context)
         {
             return context.RequiredProperties.Where(p => !p.IsSet).Select(p => p.Name).ToList();
         }
 
-        public string BuildMissingPropertiesMessage(List<string> missingNames)
+        public string BuildMissingPropertiesMessage(List<string> missingNames, string typeName)
         {
             var lines = missingNames.Select(name => $" - {name}");
-            return "The following properties must be initialized:\n" + string.Join("\n", lines);
+            return $"The following properties on '{typeName}' must be initialized:\n" + string.Join("\n", lines);
         }
 
         public bool UsedTracing(ContextModel context)
@@ -93,23 +118,38 @@ namespace Analyser.ForceSetProperties.Services
         public string BuildLocationText(SetLocation location, string basePath)
         {
             var relativePath = GetRelativePath(basePath, location.FileName);
-            var text = $"{relativePath} line {location.LineNumber}";
+            var text = relativePath != null ? $"{relativePath} line {location.LineNumber}" : $"line {location.LineNumber}";
             return location.MethodName != null ? $"{text} (via {location.MethodName})" : text;
         }
 
-        public string GetRelativePath(string basePath, string fullPath)
+        // Returns null - rather than throwing - when a path isn't available or isn't a real,
+        // absolute file path (e.g. a Compilation built without real file paths); callers just
+        // leave the path out of the message in that case instead of failing the whole diagnostic.
+        public string? GetRelativePath(string basePath, string fullPath)
         {
-            var baseUri = new Uri(AppendDirectorySeparator(basePath));
-            var fullUri = new Uri(fullPath);
-
-            if (baseUri.Scheme != fullUri.Scheme)
+            if (string.IsNullOrEmpty(fullPath))
             {
-                return fullPath;
+                return null;
             }
 
-            var relativeUri = baseUri.MakeRelativeUri(fullUri);
-            var relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-            return relativePath.Replace('/', Path.DirectorySeparatorChar);
+            try
+            {
+                var baseUri = new Uri(AppendDirectorySeparator(basePath));
+                var fullUri = new Uri(fullPath);
+
+                if (baseUri.Scheme != fullUri.Scheme)
+                {
+                    return fullPath;
+                }
+
+                var relativeUri = baseUri.MakeRelativeUri(fullUri);
+                var relativePath = Uri.UnescapeDataString(relativeUri.ToString());
+                return relativePath.Replace('/', Path.DirectorySeparatorChar);
+            }
+            catch (UriFormatException)
+            {
+                return null;
+            }
         }
 
         private static string AppendDirectorySeparator(string path)

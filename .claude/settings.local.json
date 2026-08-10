@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"[System.Reflection.Assembly]::LoadFrom\\('bin/Debug/netstandard2.0/Analyser.ForceSetProperties.dll'\\).GetTypes\\(\\) | Select-Object -ExpandProperty FullName\")",
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)",
+      "Read(//tmp/**)",
+      "Bash(grep -n \"^## Records\\\\|^### Positional construction\\\\|^### \\\\`with\\\\` expressions\" README.md)",
+      "Bash(grep -noE \"FSP[0-9]{3}[,][ ]*[0-9]{3}\" README.md Known-issues.md Suggested-features.md)"
+    ]
+  }
+}

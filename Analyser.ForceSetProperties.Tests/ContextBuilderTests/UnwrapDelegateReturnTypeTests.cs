@@ -125,5 +125,105 @@ namespace Analyser.ForceSetProperties.Tests.ContextBuilderTests
 
             Assert.Equal(logger.Type, result, SymbolEqualityComparer.Default);
         }
+
+        [Fact]
+        public void TaskOfT_ReturnsItsTypeArgument()
+        {
+            const string source = @"
+            using System.Threading.Tasks;
+
+            public class DtoModel
+            {
+                public string Name { get; set; }
+            }
+
+            public class Factory
+            {
+                public async Task<DtoModel> CreateAsync()
+                {
+                    await Task.Yield();
+                    return new DtoModel();
+                }
+            }";
+            var compilation = RoslynTestHelper.Compile(source);
+            var dtoModel = RoslynTestHelper.GetType(compilation, "DtoModel");
+            var createAsync = RoslynTestHelper.GetMethod(compilation, "Factory", "CreateAsync");
+
+            var result = _sut.UnwrapDelegateReturnType(createAsync.ReturnType);
+
+            Assert.Equal(dtoModel, result, SymbolEqualityComparer.Default);
+        }
+
+        [Fact]
+        public void ValueTaskOfT_ReturnsItsTypeArgument()
+        {
+            const string source = @"
+            using System.Threading.Tasks;
+
+            public class DtoModel
+            {
+                public string Name { get; set; }
+            }
+
+            public class Factory
+            {
+                public async ValueTask<DtoModel> CreateAsync()
+                {
+                    await Task.Yield();
+                    return new DtoModel();
+                }
+            }";
+            var compilation = RoslynTestHelper.Compile(source);
+            var dtoModel = RoslynTestHelper.GetType(compilation, "DtoModel");
+            var createAsync = RoslynTestHelper.GetMethod(compilation, "Factory", "CreateAsync");
+
+            var result = _sut.UnwrapDelegateReturnType(createAsync.ReturnType);
+
+            Assert.Equal(dtoModel, result, SymbolEqualityComparer.Default);
+        }
+
+        [Fact]
+        public void NonGenericTask_IsReturnedUnchanged()
+        {
+            const string source = @"
+            using System.Threading.Tasks;
+
+            public class Factory
+            {
+                public async Task RunAsync()
+                {
+                    await Task.Yield();
+                }
+            }";
+            var compilation = RoslynTestHelper.Compile(source);
+            var runAsync = RoslynTestHelper.GetMethod(compilation, "Factory", "RunAsync");
+
+            var result = _sut.UnwrapDelegateReturnType(runAsync.ReturnType);
+
+            Assert.Equal(runAsync.ReturnType, result, SymbolEqualityComparer.Default);
+        }
+
+        [Fact]
+        public void ListOfT_IsReturnedUnchanged()
+        {
+            const string source = @"
+            using System.Collections.Generic;
+
+            public class DtoModel
+            {
+                public string Name { get; set; }
+            }
+
+            public class Factory
+            {
+                public List<DtoModel> Create() => new List<DtoModel>();
+            }";
+            var compilation = RoslynTestHelper.Compile(source);
+            var create = RoslynTestHelper.GetMethod(compilation, "Factory", "Create");
+
+            var result = _sut.UnwrapDelegateReturnType(create.ReturnType);
+
+            Assert.Equal(create.ReturnType, result, SymbolEqualityComparer.Default);
+        }
     }
 }

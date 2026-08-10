@@ -124,6 +124,30 @@ namespace Analyser.ForceSetProperties.Tests.ContextBuilderTests
         }
 
         [Fact]
+        public void GenericReturnTypeInferredWithNoExplicitOverride_ProducesNoContexts()
+        {
+            const string source = @"
+            public class DtoModel
+            {
+                public string Name { get; set; }
+            }
+
+            public class Factory
+            {
+                [ForceSetProperties]
+                public System.Collections.Generic.List<DtoModel> Create()
+                {
+                    return new System.Collections.Generic.List<DtoModel>();
+                }
+            }";
+            var compilation = RoslynTestHelper.Compile(source);
+
+            var contexts = compilation.CreateContextModel("Factory", "Create");
+
+            Assert.Empty(contexts);
+        }
+
+        [Fact]
         public void RequiredProperties_AreNotScannedYet()
         {
             const string source = @"

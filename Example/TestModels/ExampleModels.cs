@@ -13,7 +13,7 @@ public class DatabaseModel
     public bool IsDeleted { get; set; }
 }
 
-public class Dto
+public class Dto : IDto
 {
     public int Id { get; set; }
     public string Name { get; set; }
@@ -21,4 +21,20 @@ public class Dto
 
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
+}
+
+public class EmptyDto
+{
+
+}
+
+public class InheritedDto : Dto
+{
+    public bool IsActive { get; set; }
+}
+
+public interface IDto
+{
+    public int Id { set; }
+    public string Name { get; set; }
 }

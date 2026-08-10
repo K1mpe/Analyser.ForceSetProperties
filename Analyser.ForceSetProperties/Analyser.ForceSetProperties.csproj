@@ -4,6 +4,7 @@
 	<TargetFramework>netstandard2.0</TargetFramework>
 	<LangVersion>latest</LangVersion>
 	<Nullable>enable</Nullable>
+	<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 	<OutputItemType>Analyzer</OutputItemType>
 	<EnableDefaultItems>false</EnableDefaultItems>
 	<GeneratePackageOnBuild>true</GeneratePackageOnBuild>

@@ -33,7 +33,7 @@ public class Factory
 
             var diagnostic = _sut.BuildDiagnostic(context, @"C:\Project");
 
-            Assert.Equal("FSP101", diagnostic.Id);
+            Assert.Equal("FSP201", diagnostic.Id);
         }
 
         [Fact]
@@ -60,6 +60,31 @@ public class Factory
             var diagnostic = _sut.BuildDiagnostic(context, @"C:\Project");
 
             Assert.Equal("FSP001", diagnostic.Id);
+        }
+
+        [Fact]
+        public void NoRequiredProperties_ProducesTheNoPropertiesFoundDiagnostic()
+        {
+            const string source = @"
+public class DtoModel
+{
+}
+
+public class Factory
+{
+    [ForceSetProperties]
+    public DtoModel Create()
+    {
+        return new DtoModel();
+    }
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+            var create = RoslynTestHelper.GetMethod(compilation, "Factory", "Create");
+            var context = RoslynTestHelper.BuildContext(compilation, create);
+
+            var diagnostic = _sut.BuildDiagnostic(context, @"C:\Project");
+
+            Assert.Equal("FSP005", diagnostic.Id);
         }
     }
 }

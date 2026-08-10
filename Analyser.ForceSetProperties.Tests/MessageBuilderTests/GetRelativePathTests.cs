@@ -30,5 +30,30 @@ namespace Analyser.ForceSetProperties.Tests.MessageBuilderTests
 
             Assert.Equal(@"..\Other.cs", result);
         }
+
+        [Fact]
+        public void MissingFullPath_ReturnsNullInsteadOfThrowing()
+        {
+            var result = _sut.GetRelativePath(@"C:\Project", "");
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void FullPathWithoutADirectory_ReturnsNullInsteadOfThrowing()
+        {
+            // Not a valid absolute URI, e.g. a SyntaxTree parsed without a real file path.
+            var result = _sut.GetRelativePath(@"C:\Project", "Test.cs");
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void MissingBasePath_ReturnsNullInsteadOfThrowing()
+        {
+            var result = _sut.GetRelativePath("", @"C:\Project\Test.cs");
+
+            Assert.Null(result);
+        }
     }
 }

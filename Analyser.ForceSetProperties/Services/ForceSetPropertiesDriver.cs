@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Analyser.ForceSetProperties.Models;
 using Microsoft.CodeAnalysis;
 
 namespace Analyser.ForceSetProperties.Services
@@ -14,22 +15,84 @@ namespace Analyser.ForceSetProperties.Services
 
         public IEnumerable<Diagnostic> GetDiagnostics(Compilation compilation)
         {
+            var unsupported = _targetFinder.FindUnsupportedAttributeUsages(compilation)
+                .Select(AttributeUsage.Unsupported);
+
+            var supported = _targetFinder.FindTargets(compilation)
+                .Select(target => AttributeUsage.Supported(target.Symbol, target.Node, target.Attribute));
+
+            return GetDiagnostics(compilation, unsupported.Concat(supported).ToArray());
+        }
+
+        /// <summary>
+        /// Same validation as <see cref="GetDiagnostics(Compilation)"/>, but for usages already
+        /// discovered elsewhere (the incremental generator pipeline supplies these from its own
+        /// cached attribute search instead of re-walking the whole compilation here).
+        /// </summary>
+        public IEnumerable<Diagnostic> GetDiagnostics(Compilation compilation, IReadOnlyList<AttributeUsage> usages)
+        {
             var basePath = GetCommonDirectory(compilation.SyntaxTrees.Select(t => t.FilePath));
 
-            foreach (var location in _targetFinder.FindUnsupportedAttributeUsages(compilation))
+            foreach (var usage in usages)
             {
-                yield return _messageBuilder.BuildUnsupportedTargetDiagnostic(location);
-            }
+                if (usage.ConflictingTypeSpecificationLocation != null)
+                {
+                    yield return _messageBuilder.BuildConflictingDestinationTypeDiagnostic(usage.ConflictingTypeSpecificationLocation);
+                    continue;
+                }
 
-            foreach (var target in _targetFinder.FindTargets(compilation))
-            {
-                foreach (var unsupported in _contextBuilder.GetUnsupportedDestinationTypes(target.Symbol, target.Node, target.Attribute))
+                if (!usage.IsSupported)
+                {
+                    yield return _messageBuilder.BuildUnsupportedTargetDiagnostic(usage.UnsupportedLocation!);
+                    continue;
+                }
+
+                if (usage.GenericDestinationType != null)
+                {
+                    var destinationType = usage.GenericDestinationType;
+                    var attributeLocation = usage.AttributeLocation!;
+
+                    if (_contextBuilder.IsUnsupportedDestinationType(destinationType))
+                    {
+                        yield return _messageBuilder.BuildUnsupportedDestinationTypeDiagnostic(destinationType, attributeLocation);
+                        continue;
+                    }
+
+                    if (destinationType.TypeKind == TypeKind.Interface)
+                    {
+                        yield return _messageBuilder.BuildInterfaceDestinationTypeWarningDiagnostic(destinationType, attributeLocation);
+                    }
+
+                    var genericContext = _contextBuilder.BuildSingle(usage.Symbol!, usage.Node!, attributeLocation, destinationType, compilation);
+                    _scanner.Scan(genericContext, compilation);
+                    yield return _messageBuilder.BuildDiagnostic(genericContext, basePath);
+                    continue;
+                }
+
+                if (_contextBuilder.HasConflictingTypeSpecification(usage.Attribute!))
+                {
+                    var conflictLocation = _contextBuilder.ResolveAttributeLocation(usage.Attribute!, usage.Node!);
+                    yield return _messageBuilder.BuildConflictingDestinationTypeDiagnostic(conflictLocation);
+                    continue;
+                }
+
+                foreach (var unsupported in _contextBuilder.GetUnsupportedDestinationTypes(usage.Symbol!, usage.Node!, usage.Attribute!))
                 {
                     yield return _messageBuilder.BuildUnsupportedDestinationTypeDiagnostic(unsupported.Type, unsupported.Location);
                 }
 
-                foreach (var context in _contextBuilder.Build(target.Symbol, target.Node, target.Attribute, compilation))
+                foreach (var ambiguous in _contextBuilder.GetAmbiguousInferredDestinationTypes(usage.Symbol!, usage.Node!, usage.Attribute!))
                 {
+                    yield return _messageBuilder.BuildAmbiguousGenericInferenceDiagnostic(ambiguous.Type, ambiguous.Location);
+                }
+
+                foreach (var context in _contextBuilder.Build(usage.Symbol!, usage.Node!, usage.Attribute!, compilation))
+                {
+                    if (context.DestinationType.TypeKind == TypeKind.Interface)
+                    {
+                        yield return _messageBuilder.BuildInterfaceDestinationTypeWarningDiagnostic(context.DestinationType, context.AttributeLocation);
+                    }
+
                     _scanner.Scan(context, compilation);
                     yield return _messageBuilder.BuildDiagnostic(context, basePath);
                 }

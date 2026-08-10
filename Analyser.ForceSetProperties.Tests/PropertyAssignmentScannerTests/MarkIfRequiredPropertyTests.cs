@@ -103,5 +103,40 @@ public class Factory
 
             Assert.Empty(context.RequiredProperties[0].SetLocations);
         }
+
+        [Fact]
+        public void AssignmentOnTheConcreteImplementingType_SatisfiesAnInterfaceDestinationTypesProperty()
+        {
+            const string source = @"
+public interface IDto
+{
+    string Name { get; set; }
+}
+
+public class DtoModel : IDto
+{
+    public string Name { get; set; }
+}
+
+public class Factory
+{
+    [ForceSetProperties<IDto>]
+    public DtoModel Create()
+    {
+        return new DtoModel { Name = ""x"" };
+    }
+}";
+            var compilation = RoslynTestHelper.Compile(source);
+            var create = RoslynTestHelper.GetMethod(compilation, "Factory", "Create");
+            var context = RoslynTestHelper.BuildContext(compilation, create);
+            var node = RoslynTestHelper.GetSyntaxNode(create);
+            var semanticModel = compilation.GetSemanticModel(node.SyntaxTree);
+            var assignment = node.DescendantNodes().OfType<AssignmentExpressionSyntax>().Single();
+
+            _sut.MarkIfRequiredProperty(context, assignment, semanticModel, methodName: null);
+
+            var name = Assert.Single(context.RequiredProperties);
+            Assert.True(name.IsSet);
+        }
     }
 }

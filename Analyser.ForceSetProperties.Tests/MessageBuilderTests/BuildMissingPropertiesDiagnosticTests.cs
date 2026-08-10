@@ -35,7 +35,7 @@ public class Factory
             Assert.Equal("FSP001", diagnostic.Id);
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
             Assert.Equal(
-                "Property 'Name' must be initialized when using ForceSetProperties",
+                "Property 'Name' must be initialized on 'DtoModel' when using ForceSetProperties",
                 diagnostic.GetMessage());
         }
 
@@ -65,7 +65,7 @@ public class Factory
 
             Assert.Equal("FSP002", diagnostic.Id);
             Assert.Equal(
-                "The following properties must be initialized:\n - Name\n - Id",
+                "The following properties on 'DtoModel' must be initialized:\n - Name\n - Id",
                 diagnostic.GetMessage());
         }
 

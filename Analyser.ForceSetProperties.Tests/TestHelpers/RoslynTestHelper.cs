@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Analyser.ForceSetProperties.Emission;
 using Analyser.ForceSetProperties.Models;
@@ -30,6 +31,23 @@ namespace Analyser.ForceSetProperties.Tests.TestHelpers
         }
 
         public static Compilation Compile(string source)
+        {
+            // Real consumers always parse from an actual (absolute) file path; giving the tree one
+            // here too - rather than leaving it blank - keeps path-dependent behavior, like the file
+            // paths shown in the FSP201 detailed breakdown, faithful to how the analyzer really runs.
+            var tree = CSharpSyntaxTree.ParseText("using Analyser.ForceSetProperties;\n" + source, path: @"C:\Project\Test.cs");
+
+            return CSharpCompilation.Create(
+                assemblyName: "TestAssembly",
+                syntaxTrees: new[] { AttributeTree, tree },
+                references: References,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        }
+
+        // Deliberately omits the file path Compile() otherwise supplies, to exercise the analyzer
+        // against a Compilation whose trees have no real path - e.g. a Compilation built by tooling
+        // other than a normal MSBuild/csc invocation.
+        public static Compilation CompileWithoutFilePath(string source)
         {
             var tree = CSharpSyntaxTree.ParseText("using Analyser.ForceSetProperties;\n" + source);
 
@@ -136,5 +154,15 @@ namespace Analyser.ForceSetProperties.Tests.TestHelpers
 
             return new ContextBuilder().Build(target, node, attribute, compilation).Single();
         }
+
+        // Runs the whole validation pipeline (TargetFinder + ContextBuilder + PropertyAssignmentScanner
+        // + MessageBuilder) as one unit, the same way the generator does - for integration-style tests
+        // that assert on the resulting diagnostics for a full, realistic snippet rather than on one
+        // service in isolation.
+        public static IReadOnlyList<Diagnostic> GetDiagnostics(string source)
+            => GetDiagnostics(Compile(source));
+
+        public static IReadOnlyList<Diagnostic> GetDiagnostics(Compilation compilation)
+            => new ForceSetPropertiesDriver().GetDiagnostics(compilation).ToList();
     }
 }
