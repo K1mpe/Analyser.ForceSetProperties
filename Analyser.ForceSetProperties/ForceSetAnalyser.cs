@@ -17,7 +17,12 @@ namespace Analyser.ForceSetProperties
             // this generator's own CompilationProvider/SyntaxProvider within the same compiler pass,
             // which is what lets ForAttributeWithMetadataName below find its usages at all.
             context.RegisterPostInitializationOutput(static ctx =>
-                ctx.AddSource(AttributeEmitter.AttributeHintName, AttributeEmitter.NonGenericSource));
+            {
+                // Both attributes are [Embedded] (see AttributeEmitter); Roslyn adds that attribute's
+                // definition once per compilation, however many generators ask for it.
+                ctx.AddEmbeddedAttributeDefinition();
+                ctx.AddSource(AttributeEmitter.AttributeHintName, AttributeEmitter.NonGenericSource);
+            });
 
             // ForceSetPropertiesAttribute<T> needs C# 11 to even declare, so it can't go through
             // post-init (which has no access to ParseOptions to gate on) - it's added conditionally

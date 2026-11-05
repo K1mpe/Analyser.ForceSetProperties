@@ -25,6 +25,16 @@ namespace Analyser.ForceSetProperties.Emission
         // Exposed for tests: the generic form's metadata name (arity suffix per CLR metadata naming).
         public const string GenericMetadataName = NonGenericMetadataName + "`1";
 
+        // Both attributes are emitted as internal and marked [Embedded], so every consuming project
+        // keeps its own private copy:
+        // - internal: a public copy would be visible to every project referencing the consumer, which
+        //   then sees two identical types (its own and the referenced one) and gets CS0436.
+        // - [Embedded]: internal alone is not enough, because InternalsVisibleTo (e.g. to a test
+        //   project) exposes it again. The compiler never binds to an [Embedded] type from another
+        //   assembly, whatever its accessibility.
+        // The EmbeddedAttribute itself is added by Roslyn (AddEmbeddedAttributeDefinition), so several
+        // generators doing the same never declare it twice.
+        //
         // Generic attribute types (needed for the ForceSetProperties<T> shorthand) are a C# 11
         // feature; a class deriving from Attribute can't be generic on older language versions.
         public static readonly string NonGenericSource = """
@@ -42,7 +52,8 @@ namespace Analyser.ForceSetProperties.Emission
                 /// <see cref="Types"/> or (on language versions that support generic attributes) the
                 /// generic <c>ForceSetProperties&lt;T&gt;</c> form.
                 /// </summary>
-                public class ForceSetPropertiesAttribute : Attribute
+                [global::Microsoft.CodeAnalysis.Embedded]
+                internal class ForceSetPropertiesAttribute : Attribute
                 {
                     /// <summary>Infers the target type from the return type of the annotated member.</summary>
                     public ForceSetPropertiesAttribute() { }
@@ -69,7 +80,8 @@ namespace Analyser.ForceSetProperties.Emission
                 /// <typeparamref name="T"/>, for use when it differs from (or can't be inferred from) the
                 /// annotated member's return type.
                 /// </summary>
-                public class ForceSetPropertiesAttribute<T> : ForceSetPropertiesAttribute
+                [global::Microsoft.CodeAnalysis.Embedded]
+                internal class ForceSetPropertiesAttribute<T> : ForceSetPropertiesAttribute
                 {
                     /// <summary>Sets the target type to <typeparamref name="T"/>.</summary>
                     public ForceSetPropertiesAttribute()
@@ -80,9 +92,21 @@ namespace Analyser.ForceSetProperties.Emission
             }
             """;
 
+        // Stand-in for the EmbeddedAttribute that Roslyn adds in real consumers, for tests that compile
+        // Source directly instead of running the generator.
+        public static readonly string EmbeddedAttributeSource = """
+            namespace Microsoft.CodeAnalysis
+            {
+                internal sealed partial class EmbeddedAttribute : global::System.Attribute
+                {
+                }
+            }
+            """;
+
         // Exposed so tests can compile source snippets against the same attribute definition that
         // gets injected into real consumers, rather than maintaining a duplicate. Tests always
         // compile at the compiler's latest supported language version, so both forms are included.
-        public static readonly string Source = NonGenericSource + "\n" + GenericSource;
+        // NonGenericSource goes first: its `using System;` must precede every namespace in the file.
+        public static readonly string Source = NonGenericSource + "\n" + EmbeddedAttributeSource + "\n" + GenericSource;
     }
 }

@@ -132,18 +132,59 @@ namespace Analyser.ForceSetProperties.Tests.ForceSetAnalyserTests
             }
             """;
 
-        private static (Compilation OutputCompilation, ImmutableArray<Diagnostic> GeneratorDiagnostics) Run(string source, LanguageVersion languageVersion)
+        private const string ReferencedProjectSource = """
+            using Analyser.ForceSetProperties;
+
+            [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ConsumerAssembly")]
+
+            namespace Referenced
+            {
+                public class Model
+                {
+                    public int Id { get; set; }
+                }
+
+                public static class Mapper
+                {
+                    [ForceSetProperties]
+                    public static Model Copy(Model source) => new Model { Id = source.Id };
+                }
+            }
+            """;
+
+        private const string ConsumerProjectSource = """
+            using Analyser.ForceSetProperties;
+
+            namespace Consumer
+            {
+                public static class Mapper
+                {
+                    [ForceSetProperties]
+                    public static Referenced.Model Create() => new Referenced.Model { Id = 1 };
+
+                    [ForceSetProperties<Referenced.Model>]
+                    public static object CreateAsObject() => new Referenced.Model { Id = 1 };
+                }
+            }
+            """;
+
+        private static (Compilation OutputCompilation, ImmutableArray<Diagnostic> GeneratorDiagnostics) Run(
+            string source,
+            LanguageVersion languageVersion,
+            string assemblyName = "ScratchAssembly",
+            params MetadataReference[] extraReferences)
         {
             var trustedPlatformAssemblies = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
                 .Split(System.IO.Path.PathSeparator);
             var references = trustedPlatformAssemblies
                 .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
+                .Concat(extraReferences)
                 .ToArray();
 
             var parseOptions = new CSharpParseOptions(languageVersion);
             var tree = CSharpSyntaxTree.ParseText(source, parseOptions);
             var compilation = CSharpCompilation.Create(
-                "ScratchAssembly",
+                assemblyName,
                 new[] { tree },
                 references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -226,6 +267,40 @@ namespace Analyser.ForceSetProperties.Tests.ForceSetAnalyserTests
             var error = Assert.Single(diagnostics, d => d.Id == "FSP007");
             Assert.Equal(DiagnosticSeverity.Error, error.Severity);
             Assert.DoesNotContain(diagnostics, d => d.Id == "FSP201" || d.Id == "FSP001" || d.Id == "FSP002");
+        }
+
+        [Fact]
+        public void GeneratedAttributes_AreInternalAndEmbedded()
+        {
+            var (outputCompilation, _) = Run(Source, LanguageVersion.Latest);
+
+            foreach (var metadataName in new[] { AttributeEmitter.NonGenericMetadataName, AttributeEmitter.GenericMetadataName })
+            {
+                var attribute = outputCompilation.GetTypeByMetadataName(metadataName);
+
+                Assert.NotNull(attribute);
+                Assert.Equal(Accessibility.Internal, attribute!.DeclaredAccessibility);
+                Assert.Contains(attribute.GetAttributes(), a => a.AttributeClass?.ToDisplayString() == "Microsoft.CodeAnalysis.EmbeddedAttribute");
+            }
+        }
+
+        [Fact]
+        public void ProjectReferencingAnotherConsumer_ThroughInternalsVisibleTo_HasNoConflictingAttributeTypes()
+        {
+            // Two consuming projects each get their own generated copy. A public copy - or an internal
+            // one exposed through InternalsVisibleTo - makes the referencing project see both and
+            // raise CS0436 on every usage; [Embedded] keeps the referenced copy invisible.
+            var (referencedCompilation, _) = Run(ReferencedProjectSource, LanguageVersion.Latest, assemblyName: "ReferencedAssembly");
+            using var referencedImage = new System.IO.MemoryStream();
+            var emitResult = referencedCompilation.Emit(referencedImage);
+            Assert.True(emitResult.Success, string.Join("\n", emitResult.Diagnostics));
+
+            var referencedAssembly = MetadataReference.CreateFromImage(referencedImage.ToArray());
+            var (consumerCompilation, diagnostics) = Run(ConsumerProjectSource, LanguageVersion.Latest, "ConsumerAssembly", referencedAssembly);
+
+            Assert.DoesNotContain(consumerCompilation.GetDiagnostics(), d => d.Id == "CS0436" || d.Severity == DiagnosticSeverity.Error);
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Equal(2, diagnostics.Count(d => d.Id == "FSP201"));
         }
     }
 }
